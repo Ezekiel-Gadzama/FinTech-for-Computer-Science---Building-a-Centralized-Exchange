@@ -45,4 +45,26 @@ export const getTicker = (pair) => api.get('/market/ticker', { params: { pair } 
 export const getTradingPairs = () => api.get('/market/pairs');
 export const getExchangeStats = () => api.get('/market/stats');
 
+// KYC
+export const submitKYC = (data) => api.post('/auth/kyc', data);
+export const getKYCStatus = () => api.get('/auth/kyc/status');
+export const uploadKYCDocument = (formData) => api.post('/kyc/upload', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
+export const getKYCDocuments = () => api.get('/kyc/documents');
+
+// API Keys
+export const createAPIKey = (data) => api.post('/api-keys', data);
+export const getAPIKeys = () => api.get('/api-keys');
+export const getAPIKey = (keyId) => api.get(`/api-keys/${keyId}`);
+export const updateAPIKey = (keyId, data) => api.put(`/api-keys/${keyId}`, data);
+export const deleteAPIKey = (keyId) => api.delete(`/api-keys/${keyId}`);
+export const getAPIKeyUsage = (keyId) => api.get(`/api-keys/${keyId}/usage`);
+
+// Security / 2FA
+export const setup2FA = () => api.post('/security/2fa/setup');
+export const verify2FA = (data) => api.post('/security/2fa/verify', data);
+export const disable2FA = (data) => api.post('/security/2fa/disable', data);
+export const get2FAStatus = () => api.get('/security/2fa/status');
+
 export default api;

@@ -110,14 +110,15 @@ class Trade(db.Model):
     __tablename__ = 'trades'
 
     id = db.Column(db.Integer, primary_key=True)
-    trade_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    # CHANGED: Remove unique constraint and use Text
+    trade_id = db.Column(db.Text, nullable=False, default=lambda: str(uuid.uuid4()))
 
     # Orders involved
     maker_order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
     taker_order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
 
-    # Trade details
-    trading_pair = db.Column(db.String(20), nullable=False, index=True)
+    # Trade details - CHANGED: Use Text
+    trading_pair = db.Column(db.Text, nullable=False, index=True)
     price = db.Column(db.Numeric(precision=20, scale=8), nullable=False)
     quantity = db.Column(db.Numeric(precision=20, scale=8), nullable=False)
 
@@ -125,8 +126,10 @@ class Trade(db.Model):
     maker_fee = db.Column(db.Numeric(precision=20, scale=8), default=0)
     taker_fee = db.Column(db.Numeric(precision=20, scale=8), default=0)
 
-    # Timestamp
-    executed_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    # Timestamp - CHANGED: Use timezone=True
+    executed_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+    # REMOVED: No __table_args__ with unique constraints
 
     def to_dict(self):
         """Convert trade to dictionary"""
@@ -140,7 +143,7 @@ class Trade(db.Model):
             'quantity': float(self.quantity),
             'maker_fee': float(self.maker_fee),
             'taker_fee': float(self.taker_fee),
-            'executed_at': self.executed_at.isoformat()
+            'executed_at': self.executed_at.isoformat() if self.executed_at else None
         }
 
     def __repr__(self):

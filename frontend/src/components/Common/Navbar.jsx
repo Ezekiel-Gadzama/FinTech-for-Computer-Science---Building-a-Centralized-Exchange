@@ -14,6 +14,9 @@ const Navbar = () => {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/trade" className="nav-link">Trade</Link>
           <Link to="/wallet" className="nav-link">Wallet</Link>
+          <Link to="/kyc" className="nav-link">KYC</Link>
+          <Link to="/api-keys" className="nav-link">API Keys</Link>
+          <Link to="/security" className="nav-link">Security</Link>
 
           {user && (
             <>

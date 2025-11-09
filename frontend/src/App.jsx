@@ -6,6 +6,9 @@ import Register from './components/Auth/Register';
 import Dashboard from './components/Dashboard/Dashboard';
 import TradingView from './components/Trading/TradingView';
 import Wallet from './components/Wallet/Wallet';
+import SecuritySettings from './components/Security/SecuritySettings';
+import APIKeys from './components/APIKeys/APIKeys';
+import KYC from './components/KYC/KYC';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './styles/globals.css';
 
@@ -44,6 +47,30 @@ function App() {
               element={
                 <PrivateRoute>
                   <Wallet />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/security"
+              element={
+                <PrivateRoute>
+                  <SecuritySettings />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/api-keys"
+              element={
+                <PrivateRoute>
+                  <APIKeys />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/kyc"
+              element={
+                <PrivateRoute>
+                  <KYC />
                 </PrivateRoute>
               }
             />

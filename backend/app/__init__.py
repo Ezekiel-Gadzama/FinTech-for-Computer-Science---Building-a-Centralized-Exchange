@@ -1,13 +1,13 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
+from flask_migrate import Migrate  # Add this import
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_socketio import SocketIO
 import redis
 
 db = SQLAlchemy()
-migrate = Migrate()
+migrate = Migrate()  # Add this line
 jwt = JWTManager()
 socketio = SocketIO()
 redis_client = None
@@ -16,7 +16,6 @@ redis_client = None
 def create_app(config_name='default'):
     app = Flask(__name__)
 
-    # Import config here to avoid circular imports
     from .config import config
 
     if config_name == 'testing':
@@ -52,18 +51,31 @@ def create_app(config_name='default'):
     from .routes.trading import bp as trading_bp
     from .routes.wallet import bp as wallet_bp
     from .routes.market import bp as market_bp
+    from .routes.admin import bp as admin_bp
+    from .routes.kyc import bp as kyc_bp
+    from .routes.api_keys import bp as api_keys_bp
+    from .routes.api import bp as api_bp
+    from .routes.security import bp as security_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(trading_bp)
     app.register_blueprint(wallet_bp)
     app.register_blueprint(market_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(kyc_bp)
+    app.register_blueprint(api_keys_bp)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(security_bp)
 
     # Import models to register them with SQLAlchemy
-    from .models import user, wallet, order, transaction
+    from .models import user, wallet, order, transaction, cold_wallet, kyc, api_key
 
     # Initialize services after app is created
     with app.app_context():
         from .services.matching_engine import matching_engine
+        # Set matching algorithm from config
+        matching_algorithm = app.config.get('MATCHING_ALGORITHM', 'FIFO')
+        matching_engine.matching_algorithm = matching_algorithm
         matching_engine.start()
 
     @app.route('/health')

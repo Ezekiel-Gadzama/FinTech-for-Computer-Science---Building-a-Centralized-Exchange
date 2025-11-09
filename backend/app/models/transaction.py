@@ -7,7 +7,8 @@ class Transaction(db.Model):
     __tablename__ = 'transactions'
 
     id = db.Column(db.Integer, primary_key=True)
-    transaction_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    # CHANGED: Remove unique constraint and use Text
+    transaction_id = db.Column(db.Text, nullable=False, default=lambda: str(uuid.uuid4()))
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
 
     # Transaction details
@@ -27,10 +28,12 @@ class Transaction(db.Model):
     blockchain_tx_hash = db.Column(db.String(100))
     confirmations = db.Column(db.Integer, default=0)
 
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    completed_at = db.Column(db.DateTime)
+    # Timestamps - CHANGED: Use timezone=True
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    completed_at = db.Column(db.DateTime(timezone=True))
+
+    # REMOVED: No __table_args__ with unique constraints
 
     def complete(self):
         """Mark transaction as completed"""

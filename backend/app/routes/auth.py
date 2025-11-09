@@ -77,6 +77,24 @@ def login():
         if not user.is_active:
             return jsonify({'error': 'Account is inactive'}), 403
 
+        # Check 2FA
+        requires_2fa = False
+        if user.two_factor_enabled:
+            two_factor_token = data.get('two_factor_token')
+            if not two_factor_token:
+                return jsonify({
+                    'error': '2FA token required',
+                    'requires_2fa': True
+                }), 403
+            
+            # Verify 2FA token
+            import pyotp
+            secret = getattr(user, 'totp_secret', None)
+            if secret:
+                totp = pyotp.TOTP(secret)
+                if not totp.verify(two_factor_token, valid_window=1):
+                    return jsonify({'error': 'Invalid 2FA token'}), 401
+
         # Update last login
         user.last_login = datetime.utcnow()
         db.session.commit()
@@ -130,6 +148,8 @@ def get_current_user():
 def submit_kyc():
     """Submit KYC information"""
     try:
+        from ..models.kyc import KYCVerification
+        
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
 
@@ -138,20 +158,64 @@ def submit_kyc():
 
         data = request.get_json()
 
+        # Get or create KYC verification record
+        kyc_verification = KYCVerification.query.filter_by(user_id=current_user_id).first()
+        if not kyc_verification:
+            kyc_verification = KYCVerification(user_id=current_user_id)
+            db.session.add(kyc_verification)
+
         # Update KYC info
+        kyc_verification.full_name = data.get('full_name')
+        kyc_verification.country = data.get('country')
+        kyc_verification.phone = data.get('phone')
+        kyc_verification.address = data.get('address')
+        kyc_verification.city = data.get('city')
+        kyc_verification.postal_code = data.get('postal_code')
+        kyc_verification.nationality = data.get('nationality')
+        
+        if data.get('date_of_birth'):
+            from datetime import datetime
+            kyc_verification.date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d').date()
+        
+        kyc_verification.kyc_level = 1  # Basic verification
+        kyc_verification.submitted_at = datetime.utcnow()
+
+        # Update user model for backward compatibility
         user.full_name = data.get('full_name')
         user.country = data.get('country')
         user.phone = data.get('phone')
-        user.kyc_level = 1  # Basic verification
-        user.kyc_verified = True
+        user.kyc_level = 1
+        user.kyc_verified = False  # Will be set to True after verification
 
         db.session.commit()
 
         return jsonify({
-            'message': 'KYC submitted successfully',
-            'user': user.to_dict(include_sensitive=True)
+            'message': 'KYC submitted successfully. Awaiting verification.',
+            'kyc': kyc_verification.to_dict()
         }), 200
 
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/kyc/status', methods=['GET'])
+@jwt_required()
+def get_kyc_status():
+    """Get KYC verification status"""
+    try:
+        from ..models.kyc import KYCVerification
+        
+        current_user_id = get_jwt_identity()
+        kyc_verification = KYCVerification.query.filter_by(user_id=current_user_id).first()
+        
+        if not kyc_verification:
+            return jsonify({
+                'kyc_level': 0,
+                'verified': False,
+                'status': 'not_submitted'
+            }), 200
+        
+        return jsonify(kyc_verification.to_dict()), 200
+    except Exception as e:
         return jsonify({'error': str(e)}), 500

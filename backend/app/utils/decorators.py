@@ -4,6 +4,22 @@ from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 import time
 
 
+def admin_required(f):
+    """Decorator to require admin privileges"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        verify_jwt_in_request()
+        user_id = get_jwt_identity()
+
+        from ..models.user import User
+        user = User.query.get(user_id)
+
+        if not user or not user.is_admin:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        return f(*args, **kwargs)
+    return decorated
+
 def rate_limit(max_requests: int, window: int):
     """Rate limiting decorator"""
     requests_dict = {}

@@ -1,20 +1,21 @@
 from decimal import Decimal
 from queue import Queue
 import threading
-from typing import Dict
+from typing import Dict, Literal
 from .. import db, socketio
 from ..models.order import Order, Trade
 from ..models.wallet import Wallet
 
 class OrderMatchingEngine:
-    """FIFO Order Matching Engine"""
+    """Order Matching Engine with FIFO and Pro-Rata algorithms"""
 
-    def __init__(self):
+    def __init__(self, matching_algorithm: Literal['FIFO', 'PRO_RATA'] = 'FIFO'):
         self.order_queues: Dict[str, Queue] = {}
         self.order_books: Dict[str, Dict] = {}
         self.running = False
         self.lock = threading.Lock()
         self.processing_thread = None
+        self.matching_algorithm = matching_algorithm  # 'FIFO' or 'PRO_RATA'
 
     def start(self):
         """Start the matching engine"""
@@ -107,7 +108,14 @@ class OrderMatchingEngine:
             order.status = 'partially_filled'
 
     def _match_limit_order(self, order: Order, order_book: Dict):
-        """Match a limit order"""
+        """Match a limit order using selected algorithm"""
+        if self.matching_algorithm == 'PRO_RATA':
+            self._match_limit_order_pro_rata(order, order_book)
+        else:
+            self._match_limit_order_fifo(order, order_book)
+
+    def _match_limit_order_fifo(self, order: Order, order_book: Dict):
+        """Match a limit order using FIFO algorithm"""
         opposite_side = 'asks' if order.side == 'buy' else 'bids'
         book_orders = order_book[opposite_side]
 
@@ -139,6 +147,80 @@ class OrderMatchingEngine:
                 book_orders.pop(i)
             else:
                 i += 1
+
+        # If order still has remaining quantity, add to order book
+        if remaining_qty > 0:
+            order.status = 'open' if order.filled_quantity == 0 else 'partially_filled'
+            self._add_to_orderbook(order, order_book)
+        else:
+            order.status = 'filled'
+
+    def _match_limit_order_pro_rata(self, order: Order, order_book: Dict):
+        """Match a limit order using Pro-Rata algorithm"""
+        opposite_side = 'asks' if order.side == 'buy' else 'bids'
+        book_orders = order_book[opposite_side]
+
+        remaining_qty = order.remaining_quantity
+
+        # Find all compatible orders at the best price level
+        compatible_orders = []
+        best_price = None
+
+        for book_order in book_orders:
+            # Check price compatibility
+            if order.side == 'buy':
+                if order.price < book_order.price:
+                    break
+            else:  # sell
+                if order.price > book_order.price:
+                    break
+
+            if best_price is None:
+                best_price = book_order.price
+
+            # Collect orders at the best price level
+            if book_order.price == best_price:
+                compatible_orders.append(book_order)
+            else:
+                break  # We've moved to a worse price level
+
+        if not compatible_orders:
+            # No compatible orders, add to order book
+            order.status = 'open'
+            self._add_to_orderbook(order, order_book)
+            return
+
+        # Calculate total quantity available at best price
+        total_available = sum(o.remaining_quantity for o in compatible_orders)
+
+        # Pro-Rata allocation: distribute order quantity proportionally
+        if remaining_qty >= total_available:
+            # Fill all compatible orders
+            for book_order in compatible_orders:
+                match_qty = book_order.remaining_quantity
+                self._execute_trade(order, book_order, match_qty, best_price)
+                remaining_qty -= match_qty
+                # Remove filled orders from book
+                if book_order.is_filled:
+                    book_orders.remove(book_order)
+        else:
+            # Allocate proportionally
+            allocations = []
+            for book_order in compatible_orders:
+                proportion = book_order.remaining_quantity / total_available
+                allocated_qty = remaining_qty * proportion
+                allocations.append((book_order, allocated_qty))
+
+            # Execute trades
+            for book_order, allocated_qty in allocations:
+                if allocated_qty > 0 and remaining_qty > 0:
+                    match_qty = min(allocated_qty, remaining_qty, book_order.remaining_quantity)
+                    if match_qty > 0:
+                        self._execute_trade(order, book_order, match_qty, best_price)
+                        remaining_qty -= match_qty
+                        # Remove filled orders from book
+                        if book_order.is_filled:
+                            book_orders.remove(book_order)
 
         # If order still has remaining quantity, add to order book
         if remaining_qty > 0:
@@ -224,9 +306,34 @@ class OrderMatchingEngine:
             buyer_quote.deduct_balance(quantity * price + maker_fee)
 
     def _add_to_orderbook(self, order: Order, order_book: Dict):
-        """Add order to the order book (FIFO - append at end)"""
+        """Add order to the order book"""
         side = 'bids' if order.side == 'buy' else 'asks'
-        order_book[side].append(order)
+        
+        if self.matching_algorithm == 'FIFO':
+            # FIFO: append at end (first in, first out)
+            order_book[side].append(order)
+        else:
+            # Pro-Rata: maintain price-time priority
+            # Insert at appropriate position based on price and time
+            inserted = False
+            for i, existing_order in enumerate(order_book[side]):
+                if order.side == 'buy':
+                    # For bids: higher price first, then earlier time
+                    if order.price > existing_order.price or \
+                       (order.price == existing_order.price and order.created_at < existing_order.created_at):
+                        order_book[side].insert(i, order)
+                        inserted = True
+                        break
+                else:
+                    # For asks: lower price first, then earlier time
+                    if order.price < existing_order.price or \
+                       (order.price == existing_order.price and order.created_at < existing_order.created_at):
+                        order_book[side].insert(i, order)
+                        inserted = True
+                        break
+            
+            if not inserted:
+                order_book[side].append(order)
 
     def _broadcast_orderbook_update(self, pair: str):
         """Broadcast order book update via WebSocket"""

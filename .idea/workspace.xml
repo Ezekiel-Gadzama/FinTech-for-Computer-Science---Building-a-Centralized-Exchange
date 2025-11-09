@@ -5,54 +5,26 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c2a64bee-354e-4064-8781-df8440558303" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/crypto-exchange.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/Dockerfile" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/models/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/models/timescale_init.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/services/market_data.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/services/order_book.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/services/wallet_service.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/utils/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/utils/decorators.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/utils/security.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/app/utils/validators.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/requirements.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/conftest.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/stress_test.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/test_matching_engine.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/Dockerfile" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Admin/StressTest.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Auth/Login.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Auth/Register.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Common/Footer.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Common/Navbar.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Common/Sidebar.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Dashboard/Dashboard.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Dashboard/OrderHistory.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Trading/Chart.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Trading/OrderBook.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Trading/OrderForm.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Trading/TradingView.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Wallet/Deposit.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Wallet/Wallet.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/components/Wallet/Withdraw.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/contexts/AuthContext.jsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/services/api.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/services/websocket.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/styles/globals.css" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/utils/constants.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/utils/helpers.js" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/nginx/nginx.conf" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/models/order.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/models/order.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/models/timescale_init.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/models/timescale_init.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/models/transaction.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/models/transaction.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/models/user.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/models/user.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/routes/auth.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/auth.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/services/matching_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/services/matching_engine.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/services/wallet_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/services/wallet_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/utils/decorators.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/utils/decorators.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app/utils/security.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/utils/security.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/backend/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/run.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/run.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/App.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/App.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/Auth/Login.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/Auth/Login.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/Common/Navbar.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/Common/Navbar.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/services/api.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/api.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/nginx/nginx.conf" beforeDir="false" afterPath="$PROJECT_DIR$/nginx/nginx.conf" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -69,21 +41,21 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 1
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1
+}</component>
   <component name="ProjectId" id="34z3LV6g2wt1paGOd8ghP6leyfp" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "master"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\ezeki\PycharmProjects\crypto-exchange\frontend\src\components\Common" />

@@ -28,6 +28,7 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)
     two_factor_enabled = db.Column(db.Boolean, default=False)
+    totp_secret = db.Column(db.String(32))  # TOTP secret for 2FA
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -61,10 +62,11 @@ class User(db.Model):
 
     def create_wallet(self):
         """Create Ethereum wallet for the user"""
+        from ..utils.encryption import encrypt_private_key
         account = Account.create()
         self.public_address = account.address
-        # In production, encrypt this properly
-        self.private_key_encrypted = account.key.hex()
+        # Encrypt private key
+        self.private_key_encrypted = encrypt_private_key(account.key.hex())
 
     def to_dict(self, include_sensitive=False):
         """Convert user object to dictionary"""

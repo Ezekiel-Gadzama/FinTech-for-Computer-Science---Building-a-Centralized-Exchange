@@ -18,7 +18,8 @@ def hash_api_key(api_key: str) -> str:
 
 def verify_api_key(provided_key: str, stored_hash: str) -> bool:
     """Verify API key against hash"""
-    return hmac.compare_digest(hash_api_key(provided_key), stored_hash)
+    provided_hash = hash_api_key(provided_key)
+    return hmac.compare_digest(provided_hash, stored_hash)
 
 
 def require_api_key(f):

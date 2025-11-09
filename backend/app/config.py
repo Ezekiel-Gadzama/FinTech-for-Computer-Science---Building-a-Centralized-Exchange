@@ -43,6 +43,7 @@ class Config:
     SUPPORTED_PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'ADA/USDT', 'SOL/USDT']
     TRADING_FEE = 0.001  # 0.1%
     MIN_ORDER_SIZE = 10  # USDT
+    MATCHING_ALGORITHM = os.getenv('MATCHING_ALGORITHM', 'FIFO')  # FIFO or PRO_RATA
 
     # Security
     BCRYPT_LOG_ROUNDS = 12
@@ -54,6 +55,10 @@ class Config:
 
     # TimescaleDB specific
     TIMESCALE_ENABLED = True
+    
+    # File uploads
+    UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB max file size
 
 
 class DevelopmentConfig(Config):
