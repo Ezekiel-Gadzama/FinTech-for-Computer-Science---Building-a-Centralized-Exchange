@@ -4,27 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c2a64bee-354e-4064-8781-df8440558303" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/API_DOCUMENTATION.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/ARCHITECTURE.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/REQUIREMENTS_CHECKLIST.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/test_api_endpoints.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/test_kyc_aml.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/test_security.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/test_trading_engine_comprehensive.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/test/test_wallet_system.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/models/order.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/models/order.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/routes/wallet.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/routes/wallet.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/services/matching_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/services/matching_engine.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app/services/wallet_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app/services/wallet_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/make_admin.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/make_admin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/migrate_db.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/migrate_db.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/backend/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/test/test_matching_engine.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/test/test_matching_engine.py" afterDir="false" />
-    </list>
+    <list default="true" id="c2a64bee-354e-4064-8781-df8440558303" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
