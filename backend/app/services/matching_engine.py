@@ -2,9 +2,11 @@ from decimal import Decimal
 from queue import Queue
 import threading
 from typing import Dict, Literal
+from flask import current_app
 from .. import db, socketio
 from ..models.order import Order, Trade
 from ..models.wallet import Wallet
+
 
 class OrderMatchingEngine:
     """Order Matching Engine with FIFO and Pro-Rata algorithms"""
@@ -49,7 +51,14 @@ class OrderMatchingEngine:
                 for pair, queue in self.order_queues.items():
                     if not queue.empty():
                         order = queue.get()
-                        self._match_order(order)
+                        # Process within application context
+                        try:
+                            with current_app.app_context():
+                                self._match_order(order)
+                        except RuntimeError:
+                            # If no app context is available, skip processing
+                            print("No application context available for order processing")
+                            continue
 
                 threading.Event().wait(0.01)  # Small delay to prevent CPU spinning
             except Exception as e:
@@ -58,13 +67,36 @@ class OrderMatchingEngine:
     def _match_order(self, order: Order):
         """Match an order against the order book using FIFO"""
         pair = order.trading_pair
+        
+        # Initialize order book if it doesn't exist
+        with self.lock:
+            if pair not in self.order_books:
+                self.order_books[pair] = {'bids': [], 'asks': []}
+        
         order_book = self.order_books[pair]
 
         try:
-            if order.order_type == 'market':
-                self._match_market_order(order, order_book)
+            # Get fresh order from database to ensure we have the latest state
+            # Use order_id to query if we have it, otherwise use the order object
+            if hasattr(order, 'order_id') and order.order_id:
+                db_order = Order.query.filter_by(order_id=order.order_id).first()
+            elif hasattr(order, 'id') and order.id:
+                db_order = Order.query.get(order.id)
+            else:
+                db_order = db.session.merge(order)
+            
+            if not db_order:
+                print(f"Order not found in database: {order.order_id if hasattr(order, 'order_id') else 'unknown'}")
+                return
+
+            # Ensure remaining_quantity is set
+            if db_order.remaining_quantity is None:
+                db_order.remaining_quantity = db_order.quantity - db_order.filled_quantity
+
+            if db_order.order_type == 'market':
+                self._match_market_order(db_order, order_book)
             else:  # limit order
-                self._match_limit_order(order, order_book)
+                self._match_limit_order(db_order, order_book)
 
             # Update order status in database
             db.session.commit()
@@ -74,7 +106,9 @@ class OrderMatchingEngine:
 
         except Exception as e:
             db.session.rollback()
-            print(f"Error matching order {order.order_id}: {e}")
+            print(f"Error matching order {order.order_id if hasattr(order, 'order_id') else 'unknown'}: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _match_market_order(self, order: Order, order_book: Dict):
         """Match a market order"""
@@ -87,16 +121,29 @@ class OrderMatchingEngine:
         i = 0
         while i < len(book_orders) and remaining_qty > 0:
             book_order = book_orders[i]
-            match_qty = min(remaining_qty, book_order.remaining_quantity)
-            match_price = book_order.price
+            # Get fresh order from database
+            if hasattr(book_order, 'id') and book_order.id:
+                db_book_order = Order.query.get(book_order.id)
+            elif hasattr(book_order, 'order_id') and book_order.order_id:
+                db_book_order = Order.query.filter_by(order_id=book_order.order_id).first()
+            else:
+                db_book_order = db.session.merge(book_order)
+            
+            if not db_book_order or db_book_order.remaining_quantity <= 0:
+                book_orders.pop(i)
+                continue
+                
+            match_qty = min(remaining_qty, db_book_order.remaining_quantity)
+            match_price = db_book_order.price
 
             # Execute trade
-            self._execute_trade(order, book_order, match_qty, match_price)
+            self._execute_trade(order, db_book_order, match_qty, match_price)
 
             remaining_qty -= match_qty
 
             # Remove filled order from book
-            if book_order.is_filled:
+            db.session.refresh(db_book_order)
+            if db_book_order.is_filled:
                 book_orders.pop(i)
             else:
                 i += 1
@@ -125,25 +172,37 @@ class OrderMatchingEngine:
         i = 0
         while i < len(book_orders) and remaining_qty > 0:
             book_order = book_orders[i]
+            # Get fresh order from database
+            if hasattr(book_order, 'id') and book_order.id:
+                db_book_order = Order.query.get(book_order.id)
+            elif hasattr(book_order, 'order_id') and book_order.order_id:
+                db_book_order = Order.query.filter_by(order_id=book_order.order_id).first()
+            else:
+                db_book_order = db.session.merge(book_order)
+            
+            if not db_book_order or db_book_order.remaining_quantity <= 0:
+                book_orders.pop(i)
+                continue
 
             # Check price compatibility
             if order.side == 'buy':
-                if order.price < book_order.price:
+                if order.price < db_book_order.price:
                     break
             else:  # sell
-                if order.price > book_order.price:
+                if order.price > db_book_order.price:
                     break
 
-            match_qty = min(remaining_qty, book_order.remaining_quantity)
-            match_price = book_order.price  # Maker price takes precedence
+            match_qty = min(remaining_qty, db_book_order.remaining_quantity)
+            match_price = db_book_order.price  # Maker price takes precedence
 
             # Execute trade
-            self._execute_trade(order, book_order, match_qty, match_price)
+            self._execute_trade(order, db_book_order, match_qty, match_price)
 
             remaining_qty -= match_qty
 
             # Remove filled order from book
-            if book_order.is_filled:
+            db.session.refresh(db_book_order)
+            if db_book_order.is_filled:
                 book_orders.pop(i)
             else:
                 i += 1
@@ -167,20 +226,31 @@ class OrderMatchingEngine:
         best_price = None
 
         for book_order in book_orders:
+            # Get fresh order from database
+            if hasattr(book_order, 'id') and book_order.id:
+                db_book_order = Order.query.get(book_order.id)
+            elif hasattr(book_order, 'order_id') and book_order.order_id:
+                db_book_order = Order.query.filter_by(order_id=book_order.order_id).first()
+            else:
+                db_book_order = db.session.merge(book_order)
+            
+            if not db_book_order or db_book_order.remaining_quantity <= 0:
+                continue
+
             # Check price compatibility
             if order.side == 'buy':
-                if order.price < book_order.price:
+                if order.price < db_book_order.price:
                     break
             else:  # sell
-                if order.price > book_order.price:
+                if order.price > db_book_order.price:
                     break
 
             if best_price is None:
-                best_price = book_order.price
+                best_price = db_book_order.price
 
             # Collect orders at the best price level
-            if book_order.price == best_price:
-                compatible_orders.append(book_order)
+            if db_book_order.price == best_price:
+                compatible_orders.append(db_book_order)
             else:
                 break  # We've moved to a worse price level
 
@@ -196,31 +266,43 @@ class OrderMatchingEngine:
         # Pro-Rata allocation: distribute order quantity proportionally
         if remaining_qty >= total_available:
             # Fill all compatible orders
-            for book_order in compatible_orders:
-                match_qty = book_order.remaining_quantity
-                self._execute_trade(order, book_order, match_qty, best_price)
+            for db_book_order in compatible_orders:
+                match_qty = db_book_order.remaining_quantity
+                self._execute_trade(order, db_book_order, match_qty, best_price)
                 remaining_qty -= match_qty
                 # Remove filled orders from book
-                if book_order.is_filled:
-                    book_orders.remove(book_order)
+                db.session.refresh(db_book_order)
+                if db_book_order.is_filled:
+                    # Find and remove the original book_order object
+                    for idx, bo in enumerate(book_orders):
+                        if (hasattr(bo, 'id') and bo.id == db_book_order.id) or \
+                           (hasattr(bo, 'order_id') and bo.order_id == db_book_order.order_id):
+                            book_orders.pop(idx)
+                            break
         else:
             # Allocate proportionally
             allocations = []
-            for book_order in compatible_orders:
-                proportion = book_order.remaining_quantity / total_available
+            for db_book_order in compatible_orders:
+                proportion = db_book_order.remaining_quantity / total_available
                 allocated_qty = remaining_qty * proportion
-                allocations.append((book_order, allocated_qty))
+                allocations.append((db_book_order, allocated_qty))
 
             # Execute trades
-            for book_order, allocated_qty in allocations:
+            for db_book_order, allocated_qty in allocations:
                 if allocated_qty > 0 and remaining_qty > 0:
-                    match_qty = min(allocated_qty, remaining_qty, book_order.remaining_quantity)
+                    match_qty = min(allocated_qty, remaining_qty, db_book_order.remaining_quantity)
                     if match_qty > 0:
-                        self._execute_trade(order, book_order, match_qty, best_price)
+                        self._execute_trade(order, db_book_order, match_qty, best_price)
                         remaining_qty -= match_qty
                         # Remove filled orders from book
-                        if book_order.is_filled:
-                            book_orders.remove(book_order)
+                        db.session.refresh(db_book_order)
+                        if db_book_order.is_filled:
+                            # Find and remove the original book_order object
+                            for idx, bo in enumerate(book_orders):
+                                if (hasattr(bo, 'id') and bo.id == db_book_order.id) or \
+                                   (hasattr(bo, 'order_id') and bo.order_id == db_book_order.order_id):
+                                    book_orders.pop(idx)
+                                    break
 
         # If order still has remaining quantity, add to order book
         if remaining_qty > 0:
@@ -274,17 +356,19 @@ class OrderMatchingEngine:
             buyer_base = Wallet.query.filter_by(user_id=buyer_id, currency=base_currency).first()
             buyer_quote = Wallet.query.filter_by(user_id=buyer_id, currency=quote_currency).first()
 
-            buyer_base.add_balance(quantity)
-            buyer_quote.unlock_balance(quantity * price)
-            buyer_quote.deduct_balance(quantity * price + taker_fee)
+            if buyer_base and buyer_quote:
+                buyer_base.add_balance(quantity)
+                buyer_quote.unlock_balance(quantity * price)
+                buyer_quote.deduct_balance(quantity * price + taker_fee)
 
             # Update seller (maker)
             seller_base = Wallet.query.filter_by(user_id=seller_id, currency=base_currency).first()
             seller_quote = Wallet.query.filter_by(user_id=seller_id, currency=quote_currency).first()
 
-            seller_base.unlock_balance(quantity)
-            seller_base.deduct_balance(quantity)
-            seller_quote.add_balance(quantity * price - maker_fee)
+            if seller_base and seller_quote:
+                seller_base.unlock_balance(quantity)
+                seller_base.deduct_balance(quantity)
+                seller_quote.add_balance(quantity * price - maker_fee)
         else:
             # Taker sells base currency for quote currency
             seller_id, buyer_id = taker_order.user_id, maker_order.user_id
@@ -293,22 +377,24 @@ class OrderMatchingEngine:
             seller_base = Wallet.query.filter_by(user_id=seller_id, currency=base_currency).first()
             seller_quote = Wallet.query.filter_by(user_id=seller_id, currency=quote_currency).first()
 
-            seller_base.unlock_balance(quantity)
-            seller_base.deduct_balance(quantity)
-            seller_quote.add_balance(quantity * price - taker_fee)
+            if seller_base and seller_quote:
+                seller_base.unlock_balance(quantity)
+                seller_base.deduct_balance(quantity)
+                seller_quote.add_balance(quantity * price - taker_fee)
 
             # Update buyer (maker)
             buyer_base = Wallet.query.filter_by(user_id=buyer_id, currency=base_currency).first()
             buyer_quote = Wallet.query.filter_by(user_id=buyer_id, currency=quote_currency).first()
 
-            buyer_base.add_balance(quantity)
-            buyer_quote.unlock_balance(quantity * price)
-            buyer_quote.deduct_balance(quantity * price + maker_fee)
+            if buyer_base and buyer_quote:
+                buyer_base.add_balance(quantity)
+                buyer_quote.unlock_balance(quantity * price)
+                buyer_quote.deduct_balance(quantity * price + maker_fee)
 
     def _add_to_orderbook(self, order: Order, order_book: Dict):
         """Add order to the order book"""
         side = 'bids' if order.side == 'buy' else 'asks'
-        
+
         if self.matching_algorithm == 'FIFO':
             # FIFO: append at end (first in, first out)
             order_book[side].append(order)
@@ -320,18 +406,18 @@ class OrderMatchingEngine:
                 if order.side == 'buy':
                     # For bids: higher price first, then earlier time
                     if order.price > existing_order.price or \
-                       (order.price == existing_order.price and order.created_at < existing_order.created_at):
+                            (order.price == existing_order.price and order.created_at < existing_order.created_at):
                         order_book[side].insert(i, order)
                         inserted = True
                         break
                 else:
                     # For asks: lower price first, then earlier time
                     if order.price < existing_order.price or \
-                       (order.price == existing_order.price and order.created_at < existing_order.created_at):
+                            (order.price == existing_order.price and order.created_at < existing_order.created_at):
                         order_book[side].insert(i, order)
                         inserted = True
                         break
-            
+
             if not inserted:
                 order_book[side].append(order)
 
@@ -383,38 +469,43 @@ class OrderMatchingEngine:
 
     def cancel_order(self, order_id: str) -> bool:
         """Cancel an order"""
-        order = Order.query.filter_by(order_id=order_id).first()
-        if not order:
+        try:
+            with current_app.app_context():
+                order = Order.query.filter_by(order_id=order_id).first()
+                if not order:
+                    return False
+
+                if order.status not in ['open', 'partially_filled']:
+                    return False
+
+                # Remove from order book
+                pair = order.trading_pair
+                if pair in self.order_books:
+                    side = 'bids' if order.side == 'buy' else 'asks'
+                    self.order_books[pair][side] = [
+                        o for o in self.order_books[pair][side] if o.order_id != order_id
+                    ]
+
+                # Unlock balance
+                base_currency, quote_currency = order.trading_pair.split('/')
+                currency = quote_currency if order.side == 'buy' else base_currency
+                amount = order.remaining_quantity * order.price if order.side == 'buy' else order.remaining_quantity
+
+                wallet = Wallet.query.filter_by(user_id=order.user_id, currency=currency).first()
+                if wallet:
+                    wallet.unlock_balance(amount)
+
+                # Update order status
+                order.cancel()
+                db.session.commit()
+
+                # Broadcast update
+                self._broadcast_orderbook_update(pair)
+
+                return True
+        except Exception as e:
+            print(f"Error canceling order: {e}")
             return False
-
-        if order.status not in ['open', 'partially_filled']:
-            return False
-
-        # Remove from order book
-        pair = order.trading_pair
-        if pair in self.order_books:
-            side = 'bids' if order.side == 'buy' else 'asks'
-            self.order_books[pair][side] = [
-                o for o in self.order_books[pair][side] if o.order_id != order_id
-            ]
-
-        # Unlock balance
-        base_currency, quote_currency = order.trading_pair.split('/')
-        currency = quote_currency if order.side == 'buy' else base_currency
-        amount = order.remaining_quantity * order.price if order.side == 'buy' else order.remaining_quantity
-
-        wallet = Wallet.query.filter_by(user_id=order.user_id, currency=currency).first()
-        if wallet:
-            wallet.unlock_balance(amount)
-
-        # Update order status
-        order.cancel()
-        db.session.commit()
-
-        # Broadcast update
-        self._broadcast_orderbook_update(pair)
-
-        return True
 
 
 # Global instance

@@ -77,6 +77,14 @@ class TestingConfig(Config):
     JWT_SECRET_KEY = 'test-jwt-secret-key'
     REDIS_URL = 'redis://localhost:6379/1'  # Use different DB for tests
 
+    # SQLite doesn't support connection pooling options
+    # Override engine options for testing with SQLite
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'connect_args': {
+            'check_same_thread': False  # Allow SQLite to work with Flask's threading
+        }
+    }
+
     # Disable CSRF for testing
     WTF_CSRF_ENABLED = False
 

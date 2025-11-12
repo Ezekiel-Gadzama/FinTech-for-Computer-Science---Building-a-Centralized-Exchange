@@ -15,13 +15,13 @@ with app.app_context():
     if not os.path.exists(migrations_dir):
         print("Initializing migrations...")
         init()
-        print("✅ Migrations initialized")
+        print("Migrations initialized")
     
     print("Creating migration...")
     migrate(message="Add new models and columns (KYC, API keys, 2FA, cold wallets)")
-    print("✅ Migration created")
+    print("Migration created")
     
     print("Applying migration...")
     upgrade()
-    print("✅ Migration applied successfully!")
+    print("Migration applied successfully!")
 

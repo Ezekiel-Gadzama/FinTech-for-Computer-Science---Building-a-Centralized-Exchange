@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from decimal import Decimal
 import uuid
 
-from .. import db  # Relative import
+from .. import db
 
 
 class Order(db.Model):

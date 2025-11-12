@@ -231,7 +231,7 @@ def get_deposit_address(currency):
     try:
         current_user_id = get_jwt_identity()
 
-        from app.models.user import User
+        from ..models.user import User
         user = User.query.get(current_user_id)
 
         if not user:

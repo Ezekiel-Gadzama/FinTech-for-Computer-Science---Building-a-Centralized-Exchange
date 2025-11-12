@@ -8,6 +8,7 @@ python-socketio==5.11.0
 psycopg2-binary
 web3==6.11.3
 eth-account==0.10.0
+eth-typing==3.5.2
 requests==2.31.0
 python-dotenv==1.0.0
 bcrypt==4.1.2
@@ -24,6 +25,7 @@ python-dateutil==2.8.2
 pyotp==2.9.0
 qrcode[pil]==7.4.2
 pyotp==2.9.0
+pytest-cov==4.1.0
 # TimescaleDB support (works with PostgreSQL)
 # No additional package needed - TimescaleDB is a PostgreSQL extension
 # psycopg2-binary handles the connection

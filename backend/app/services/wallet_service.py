@@ -1,9 +1,9 @@
 from decimal import Decimal
-from app import db
-from app.models.wallet import Wallet, ExchangeWallet
-from app.models.transaction import Transaction
-from app.models.user import User
-from app.models.cold_wallet import ColdWallet, ColdWalletTransfer
+from .. import db
+from ..models.wallet import Wallet, ExchangeWallet
+from ..models.transaction import Transaction
+from ..models.user import User
+from ..models.cold_wallet import ColdWallet, ColdWalletTransfer
 from datetime import datetime
 import threading
 
@@ -39,7 +39,7 @@ class WalletService:
             from eth_account import Account
             account = Account.create()
             
-            from app.utils.encryption import encrypt_private_key
+            from ..utils.encryption import encrypt_private_key
             encrypted_key = encrypt_private_key(account.key.hex())
             
             cold_wallet = ColdWallet(

@@ -20,8 +20,8 @@ def make_admin(username_or_email):
             from sqlalchemy import text
             
             # Debug: Check database connection
-            print(f"🔍 Searching for user: '{username_or_email}'")
-            print(f"📊 Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}")
+            print(f"Searching for user: '{username_or_email}'")
+            print(f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not set')}")
             
             # First, let's see what users exist (for debugging)
             all_users = db.session.execute(
@@ -29,11 +29,11 @@ def make_admin(username_or_email):
             ).fetchall()
             
             if all_users:
-                print(f"\n📋 Found {len(all_users)} user(s) in database:")
+                print(f"\nFound {len(all_users)} user(s) in database:")
                 for u in all_users:
                     print(f"   - ID: {u[0]}, Username: '{u[1]}', Email: '{u[2]}', Admin: {u[3]}")
             else:
-                print("⚠️  No users found in database")
+                print("No users found in database")
             
             # Try case-insensitive search (PostgreSQL uses ILIKE)
             result = db.session.execute(
@@ -48,14 +48,14 @@ def make_admin(username_or_email):
             ).fetchone()
             
             if not result:
-                print(f"\n❌ User '{username_or_email}' not found")
-                print("💡 Tip: Make sure the username/email is spelled correctly (case-insensitive)")
+                print(f"\nUser '{username_or_email}' not found")
+                print("Tip: Make sure the username/email is spelled correctly (case-insensitive)")
                 return False
             
             user_id, username, email, is_admin = result
             
             if is_admin:
-                print(f"ℹ️  User '{username}' ({email}) is already an admin")
+                print(f"User '{username}' ({email}) is already an admin")
                 return True
             
             # Update the user to be an admin
@@ -65,13 +65,13 @@ def make_admin(username_or_email):
             )
             db.session.commit()
             
-            print(f"✅ Successfully made '{username}' ({email}) an admin")
+            print(f"Successfully made '{username}' ({email}) an admin")
             return True
             
         except Exception as e:
             db.session.rollback()
-            print(f"❌ Error: {str(e)}")
-            print("\n💡 Tip: If you see a column error, you may need to run database migrations:")
+            print(f"Error: {str(e)}")
+            print("\n Tip: If you see a column error, you may need to run database migrations:")
             print("   flask db upgrade")
             return False
 
