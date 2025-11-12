@@ -219,3 +219,60 @@ def get_kyc_status():
         return jsonify(kyc_verification.to_dict()), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/create-admin', methods=['POST'])
+def create_admin():
+    """Create an admin user (development only)"""
+    try:
+        import os
+        # Only allow in development mode
+        if os.environ.get('FLASK_ENV') != 'development' and os.environ.get('ENVIRONMENT') != 'development':
+            return jsonify({'error': 'This endpoint is only available in development mode'}), 403
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        if not all(k in data for k in ['email', 'username', 'password']):
+            return jsonify({'error': 'Missing required fields: email, username, password'}), 400
+        
+        # Check if user already exists
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({'error': 'Email already registered'}), 409
+        
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({'error': 'Username already taken'}), 409
+        
+        # Create new admin user
+        user = User(
+            email=data['email'],
+            username=data['username'],
+            password=data['password']
+        )
+        user.is_admin = True  # Set as admin
+        
+        db.session.add(user)
+        db.session.flush()  # Get user ID
+        
+        # Create initial wallets for supported currencies
+        currencies = ['USDT', 'BTC', 'ETH', 'BNB', 'ADA', 'SOL']
+        for currency in currencies:
+            wallet = Wallet(user_id=user.id, currency=currency)
+            db.session.add(wallet)
+        
+        db.session.commit()
+        
+        # Generate tokens
+        access_token = create_access_token(identity=user.id)
+        refresh_token = create_refresh_token(identity=user.id)
+        
+        return jsonify({
+            'message': 'Admin user created successfully',
+            'user': user.to_dict(),
+            'access_token': access_token,
+            'refresh_token': refresh_token
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

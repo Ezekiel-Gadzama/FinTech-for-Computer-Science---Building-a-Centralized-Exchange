@@ -8,7 +8,6 @@ from ..middleware.rate_limiter import check_api_key_rate_limit
 from datetime import datetime
 import time
 
-
 def require_api_key(f):
     """Decorator to require API key authentication"""
     @wraps(f)

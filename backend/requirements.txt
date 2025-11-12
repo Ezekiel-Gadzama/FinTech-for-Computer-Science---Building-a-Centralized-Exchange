@@ -23,7 +23,7 @@ pytest==7.4.3
 python-dateutil==2.8.2
 pyotp==2.9.0
 qrcode[pil]==7.4.2
-
+pyotp==2.9.0
 # TimescaleDB support (works with PostgreSQL)
 # No additional package needed - TimescaleDB is a PostgreSQL extension
 # psycopg2-binary handles the connection

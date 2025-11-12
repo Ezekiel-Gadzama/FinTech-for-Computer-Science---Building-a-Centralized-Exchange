@@ -207,3 +207,18 @@ def get_pending_kyc():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+@bp.route('/documents/<user_id>', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_user_documents(user_id):
+    """Get KYC documents for a specific user (admin only)"""
+    try:
+        documents = KYCDocument.query.filter_by(user_id=user_id).all()
+        
+        return jsonify({
+            'documents': [doc.to_dict() for doc in documents]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

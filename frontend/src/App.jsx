@@ -9,6 +9,7 @@ import Wallet from './components/Wallet/Wallet';
 import SecuritySettings from './components/Security/SecuritySettings';
 import APIKeys from './components/APIKeys/APIKeys';
 import KYC from './components/KYC/KYC';
+import AdminPanel from './components/Admin/AdminPanel';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './styles/globals.css';
 
@@ -71,6 +72,14 @@ function App() {
               element={
                 <PrivateRoute>
                   <KYC />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <PrivateRoute>
+                  <AdminPanel />
                 </PrivateRoute>
               }
             />

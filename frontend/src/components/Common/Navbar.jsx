@@ -17,6 +17,11 @@ const Navbar = () => {
           <Link to="/kyc" className="nav-link">KYC</Link>
           <Link to="/api-keys" className="nav-link">API Keys</Link>
           <Link to="/security" className="nav-link">Security</Link>
+          {user && user.is_admin && (
+            <Link to="/admin" className="nav-link" style={{ color: 'var(--accent)' }}>
+              Admin Panel
+            </Link>
+          )}
 
           {user && (
             <>

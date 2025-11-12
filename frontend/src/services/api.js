@@ -67,4 +67,13 @@ export const verify2FA = (data) => api.post('/security/2fa/verify', data);
 export const disable2FA = (data) => api.post('/security/2fa/disable', data);
 export const get2FAStatus = () => api.get('/security/2fa/status');
 
+// Admin - KYC Management
+export const getPendingKYC = () => api.get('/kyc/pending');
+export const verifyKYC = (userId, data) => api.post(`/kyc/verify/${userId}`, data);
+export const rejectKYC = (userId, data) => api.post(`/kyc/reject/${userId}`, data);
+export const getUserDocuments = (userId) => api.get(`/kyc/documents/${userId}`);
+
+// Admin - Create Admin User (development only)
+export const createAdmin = (data) => api.post('/auth/create-admin', data);
+
 export default api;

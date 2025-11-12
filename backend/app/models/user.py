@@ -78,6 +78,7 @@ class User(db.Model):
             'kyc_level': self.kyc_level,
             'public_address': self.public_address,
             'is_active': self.is_active,
+            'is_admin': self.is_admin,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None
         }
