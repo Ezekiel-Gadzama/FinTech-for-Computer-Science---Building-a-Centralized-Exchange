@@ -1,13 +1,15 @@
 import axios from 'axios';
 
-// Use the nginx proxy URL (port 80)
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost';
+// Use the nginx proxy URL (port 80) - make sure this matches your nginx config
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true, // ADD THIS - important for CORS with credentials
+  timeout: 10000 // Add timeout to prevent hanging requests
 });
 
 // Add token to requests
@@ -24,14 +26,14 @@ export const register = (data) => api.post('/auth/register', data);
 export const login = (data) => api.post('/auth/login', data);
 export const getCurrentUser = () => api.get('/auth/me');
 
-// Trading - UPDATED to use query parameters
+// Trading
 export const placeOrder = (data) => api.post('/trading/order', data);
 export const getOrders = (params) => api.get('/trading/orders', { params });
 export const cancelOrder = (orderId) => api.delete(`/trading/order/${orderId}`);
 export const getOrderBook = (pair, depth = 20) =>
-  api.get('/trading/orderbook', { params: { pair, depth } }); // Updated
+  api.get('/trading/orderbook', { params: { pair, depth } });
 export const getRecentTrades = (pair, limit = 50) =>
-  api.get('/trading/trades', { params: { pair, limit } }); // Updated
+  api.get('/trading/trades', { params: { pair, limit } });
 
 // Wallet
 export const getBalances = () => api.get('/wallet/balances');
@@ -39,9 +41,9 @@ export const deposit = (data) => api.post('/wallet/deposit', data);
 export const withdraw = (data) => api.post('/wallet/withdraw', data);
 export const getTransactions = (params) => api.get('/wallet/transactions', { params });
 
-// Market - UPDATED to use query parameters
+// Market
 export const getPrices = () => api.get('/market/prices');
-export const getTicker = (pair) => api.get('/market/ticker', { params: { pair } }); // Updated
+export const getTicker = (pair) => api.get('/market/ticker', { params: { pair } });
 export const getTradingPairs = () => api.get('/market/pairs');
 export const getExchangeStats = () => api.get('/market/stats');
 

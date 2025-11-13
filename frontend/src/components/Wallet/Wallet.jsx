@@ -86,7 +86,6 @@ const Wallet = () => {
   };
 
   const totalValue = balances.reduce((sum, balance) => {
-    // Simplified: assuming 1:1 for USDT, would need real prices for others
     return sum + balance.balance;
   }, 0);
 
@@ -228,21 +227,34 @@ const Wallet = () => {
               <h2 style={{ marginBottom: '24px' }}>Deposit Funds</h2>
               <form onSubmit={handleDeposit}>
                 <div className="form-group">
-                  <label className="form-label">Currency</label>
+                  <label htmlFor="currency-select" className="form-label">Currency</label>
                   <select
+                    id="currency-select"
+                    name="currency"
                     className="input"
                     value={selectedCurrency}
                     onChange={(e) => setSelectedCurrency(e.target.value)}
                   >
-                    {balances.map(b => (
-                      <option key={b.currency} value={b.currency}>{b.currency}</option>
-                    ))}
+                    {balances.length > 0 ? (
+                      balances.map(b => (
+                        <option key={b.currency} value={b.currency}>
+                          {b.currency}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="USDT">USDT</option>
+                        <option value="BTC">BTC</option>
+                        <option value="ETH">ETH</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Amount</label>
+                  <label htmlFor="deposit-amount" className="form-label">Amount</label>
                   <input
+                    id="deposit-amount"
                     type="number"
                     step="0.01"
                     className="input"
@@ -289,8 +301,10 @@ const Wallet = () => {
               <h2 style={{ marginBottom: '24px' }}>Withdraw Funds</h2>
               <form onSubmit={handleWithdraw}>
                 <div className="form-group">
-                  <label className="form-label">Currency</label>
+                  <label htmlFor="withdraw-currency-select" className="form-label">Currency</label>
                   <select
+                    id="withdraw-currency-select"
+                    name="currency"
                     className="input"
                     value={selectedCurrency}
                     onChange={(e) => setSelectedCurrency(e.target.value)}
@@ -302,8 +316,9 @@ const Wallet = () => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Amount</label>
+                  <label htmlFor="withdraw-amount" className="form-label">Amount</label>
                   <input
+                    id="withdraw-amount"
                     type="number"
                     step="0.01"
                     className="input"
@@ -315,8 +330,9 @@ const Wallet = () => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Withdrawal Address</label>
+                  <label htmlFor="withdraw-address" className="form-label">Withdrawal Address</label>
                   <input
+                    id="withdraw-address"
                     type="text"
                     className="input"
                     value={withdrawAddress}

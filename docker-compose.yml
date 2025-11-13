@@ -21,7 +21,6 @@ services:
     command: python run.py
     volumes:
       - ./backend:/app
-    # Expose port for debugging (can be removed in production)
     ports:
       - "5000:5000"
     depends_on:
@@ -32,22 +31,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       FLASK_ENV: development
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health', timeout=5)"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 3s
       retries: 3
-      start_period: 40s
-
-  nginx:
-    image: nginx:alpine
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
-      # If you have frontend build files
-      # - ./frontend/build:/var/www/crypto-exchange/frontend/build
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
 
   frontend:
     build:
@@ -56,10 +43,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - REACT_APP_API_URL=http://localhost
-      - REACT_APP_WS_URL=http://localhost
+      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_WS_URL=http://localhost:5000
     depends_on:
-      - nginx
+      - backend
 
 volumes:
   postgres_data:

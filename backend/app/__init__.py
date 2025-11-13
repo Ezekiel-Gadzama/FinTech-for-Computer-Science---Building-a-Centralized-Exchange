@@ -1,52 +1,54 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate  # Add this import
+from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from flask_socketio import SocketIO
 import redis
 
 db = SQLAlchemy()
-migrate = Migrate()  # Add this line
+migrate = Migrate()
 jwt = JWTManager()
-socketio = SocketIO()
-redis_client = None
 
+# IMPORTANT: Allow all CORS from React
+socketio = SocketIO(cors_allowed_origins="*")
+
+redis_client = None
 
 def create_app(config_name='default'):
     app = Flask(__name__)
 
     from .config import config
+    app.config.from_object(config[config_name])
 
-    if config_name == 'testing':
-        from .config import TestingConfig
-        app.config.from_object(TestingConfig)
-    else:
-        app.config.from_object(config[config_name])
-
-    # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
 
-    # REMOVE Flask CORS - nginx handles it
-    # CORS(app, origins=app.config['CORS_ORIGINS'])
+    # ⭐ ENABLE FLASK CORS (since NGINX is removed)
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": "http://localhost:3000"}},
+        supports_credentials=True,
+    )
 
-    # Socket.IO without Redis message queue for now
-    socketio.init_app(app,
-                      cors_allowed_origins=['http://localhost:3000'],
-                      async_mode='eventlet')
+    # ⭐ Socket.IO CORS
+    socketio.init_app(
+        app,
+        async_mode="threading",
+        cors_allowed_origins="*"
+    )
 
-    # Initialize Redis
+    # Redis
     global redis_client
     try:
-        redis_client = redis.from_url(app.config['REDIS_URL'])
-        print("Redis connected successfully")
-    except Exception as e:
+        redis_client = redis.from_url(app.config["REDIS_URL"])
+        print("Connected to Redis")
+    except:
+        print("Redis connection failed")
         redis_client = None
-        print(f"Redis connection failed: {e}")
 
-    # Import and register blueprints
+    # Register blueprints
     from .routes.auth import bp as auth_bp
     from .routes.trading import bp as trading_bp
     from .routes.wallet import bp as wallet_bp
@@ -67,19 +69,8 @@ def create_app(config_name='default'):
     app.register_blueprint(api_bp)
     app.register_blueprint(security_bp)
 
-    # Import models to register them with SQLAlchemy
-    from .models import user, wallet, order, transaction, cold_wallet, kyc, api_key
-
-    # Initialize services after app is created
-    with app.app_context():
-        from .services.matching_engine import matching_engine
-        # Set matching algorithm from config
-        matching_algorithm = app.config.get('MATCHING_ALGORITHM', 'FIFO')
-        matching_engine.matching_algorithm = matching_algorithm
-        matching_engine.start()
-
     @app.route('/health')
     def health():
-        return {'status': 'healthy'}, 200
+        return {"status": "OK"}, 200
 
     return app

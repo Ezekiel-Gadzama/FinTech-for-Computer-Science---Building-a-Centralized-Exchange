@@ -1,332 +1,287 @@
 from decimal import Decimal
-from queue import Queue
-import threading
 from typing import Dict, Literal
+import threading
+
 from flask import current_app
+
 from .. import db, socketio
 from ..models.order import Order, Trade
 from ..models.wallet import Wallet
 
 
 class OrderMatchingEngine:
-    """Order Matching Engine with FIFO and Pro-Rata algorithms"""
+    """
+    Simple FIFO order matching engine.
 
-    def __init__(self, matching_algorithm: Literal['FIFO', 'PRO_RATA'] = 'FIFO'):
-        self.order_queues: Dict[str, Queue] = {}
+    - In-memory order books:
+        self.order_books[pair] = {"bids": [Order], "asks": [Order]}
+    - Matching is done synchronously when add_order() is called.
+    - No background thread, no Queue.
+    """
+
+    def __init__(self, matching_algorithm: Literal["FIFO"] = "FIFO"):
         self.order_books: Dict[str, Dict] = {}
-        self.running = False
         self.lock = threading.Lock()
-        self.processing_thread = None
-        self.matching_algorithm = matching_algorithm  # 'FIFO' or 'PRO_RATA'
+        self.matching_algorithm = matching_algorithm  # kept for config compatibility
 
+    # -------------------------------------------------------------------------
+    # Public API
+    # -------------------------------------------------------------------------
     def start(self):
-        """Start the matching engine"""
-        if not self.running:
-            self.running = True
-            self.processing_thread = threading.Thread(target=self._process_orders, daemon=True)
-            self.processing_thread.start()
-            print("Matching engine started")
+        """Kept for compatibility – nothing to start in synchronous mode."""
+        print("Matching engine running in synchronous FIFO mode")
 
     def stop(self):
-        """Stop the matching engine"""
-        self.running = False
-        if self.processing_thread:
-            self.processing_thread.join()
+        """Kept for compatibility – nothing to stop."""
+        pass
 
     def add_order(self, order: Order):
-        """Add order to the matching engine"""
+        """
+        Entry point from your route.
+
+        Called from /api/trading/order after the order is saved to DB.
+        Matching is performed immediately in the same request.
+        """
         pair = order.trading_pair
 
         with self.lock:
-            if pair not in self.order_queues:
-                self.order_queues[pair] = Queue()
-                self.order_books[pair] = {'bids': [], 'asks': []}
-
-            self.order_queues[pair].put(order)
-
-    def _process_orders(self):
-        """Process orders from the queue"""
-        while self.running:
-            try:
-                for pair, queue in self.order_queues.items():
-                    if not queue.empty():
-                        order = queue.get()
-                        # Process within application context
-                        try:
-                            with current_app.app_context():
-                                self._match_order(order)
-                        except RuntimeError:
-                            # If no app context is available, skip processing
-                            print("No application context available for order processing")
-                            continue
-
-                threading.Event().wait(0.01)  # Small delay to prevent CPU spinning
-            except Exception as e:
-                print(f"Error processing orders: {e}")
-
-    def _match_order(self, order: Order):
-        """Match an order against the order book using FIFO"""
-        pair = order.trading_pair
-        
-        # Initialize order book if it doesn't exist
-        with self.lock:
+            # Ensure order book exists
             if pair not in self.order_books:
-                self.order_books[pair] = {'bids': [], 'asks': []}
-        
-        order_book = self.order_books[pair]
+                self.order_books[pair] = {"bids": [], "asks": []}
 
+            try:
+                # Load fresh order from DB (ensure we have attached instance)
+                if getattr(order, "order_id", None):
+                    db_order = Order.query.filter_by(order_id=order.order_id).first()
+                else:
+                    db_order = Order.query.get(order.id)
+
+                if not db_order:
+                    print(f"[MatchingEngine] Order not found in DB: {order}")
+                    return
+
+                # Ensure remaining_quantity is set
+                if db_order.remaining_quantity is None:
+                    db_order.remaining_quantity = db_order.quantity - db_order.filled_quantity
+
+                if db_order.remaining_quantity <= 0:
+                    return
+
+                # Decide matching path
+                if db_order.order_type == "market":
+                    self._match_market_order(db_order)
+                else:
+                    self._match_limit_order(db_order)
+
+                # Persist changes
+                db.session.commit()
+
+                # Broadcast updated book
+                self._broadcast_orderbook_update(pair)
+
+            except Exception as e:
+                db.session.rollback()
+                print(f"[MatchingEngine] Error matching order {order}: {e}")
+                import traceback
+                traceback.print_exc()
+
+    def get_orderbook(self, pair: str, depth: int = 20) -> Dict:
+        """Return current order book snapshot for REST & WebSocket."""
+        if pair not in self.order_books:
+            return {"bids": [], "asks": []}
+
+        book = self.order_books[pair]
+
+        bids = [
+            {
+                "price": float(o.price),
+                "quantity": float(o.remaining_quantity),
+                "total": float(o.price * o.remaining_quantity),
+            }
+            for o in book["bids"][:depth]
+            if o.remaining_quantity > 0
+        ]
+
+        asks = [
+            {
+                "price": float(o.price),
+                "quantity": float(o.remaining_quantity),
+                "total": float(o.price * o.remaining_quantity),
+            }
+            for o in book["asks"][:depth]
+            if o.remaining_quantity > 0
+        ]
+
+        return {"bids": bids, "asks": asks}
+
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel an order and clean from book + wallets."""
         try:
-            # Get fresh order from database to ensure we have the latest state
-            # Use order_id to query if we have it, otherwise use the order object
-            if hasattr(order, 'order_id') and order.order_id:
-                db_order = Order.query.filter_by(order_id=order.order_id).first()
-            elif hasattr(order, 'id') and order.id:
-                db_order = Order.query.get(order.id)
-            else:
-                db_order = db.session.merge(order)
-            
-            if not db_order:
-                print(f"Order not found in database: {order.order_id if hasattr(order, 'order_id') else 'unknown'}")
-                return
+            with current_app.app_context(), self.lock:
+                order = Order.query.filter_by(order_id=order_id).first()
+                if not order:
+                    return False
 
-            # Ensure remaining_quantity is set
-            if db_order.remaining_quantity is None:
-                db_order.remaining_quantity = db_order.quantity - db_order.filled_quantity
+                if order.status not in ["open", "partially_filled"]:
+                    return False
 
-            if db_order.order_type == 'market':
-                self._match_market_order(db_order, order_book)
-            else:  # limit order
-                self._match_limit_order(db_order, order_book)
+                pair = order.trading_pair
 
-            # Update order status in database
-            db.session.commit()
+                # Remove from in-memory book
+                if pair in self.order_books:
+                    side = "bids" if order.side == "buy" else "asks"
+                    self.order_books[pair][side] = [
+                        o for o in self.order_books[pair][side] if o.order_id != order_id
+                    ]
 
-            # Broadcast order book update
-            self._broadcast_orderbook_update(pair)
+                # Unlock remaining locked balance
+                base_currency, quote_currency = pair.split("/")
+                if order.side == "buy":
+                    currency = quote_currency
+                    amount = order.remaining_quantity * order.price
+                else:
+                    currency = base_currency
+                    amount = order.remaining_quantity
+
+                wallet = Wallet.query.filter_by(user_id=order.user_id, currency=currency).first()
+                if wallet:
+                    wallet.unlock_balance(amount)
+
+                order.cancel()
+                db.session.commit()
+
+                self._broadcast_orderbook_update(pair)
+                return True
 
         except Exception as e:
             db.session.rollback()
-            print(f"Error matching order {order.order_id if hasattr(order, 'order_id') else 'unknown'}: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[MatchingEngine] Error canceling order {order_id}: {e}")
+            return False
 
-    def _match_market_order(self, order: Order, order_book: Dict):
-        """Match a market order"""
-        opposite_side = 'asks' if order.side == 'buy' else 'bids'
-        book_orders = order_book[opposite_side]
+    # -------------------------------------------------------------------------
+    # Core matching logic
+    # -------------------------------------------------------------------------
+    def _match_market_order(self, order: Order):
+        """Match a market order against the best prices on the opposite side."""
+        pair = order.trading_pair
+        book = self.order_books[pair]
 
-        remaining_qty = order.remaining_quantity
-
-        # Match with available orders (FIFO - first in, first out)
-        i = 0
-        while i < len(book_orders) and remaining_qty > 0:
-            book_order = book_orders[i]
-            # Get fresh order from database
-            if hasattr(book_order, 'id') and book_order.id:
-                db_book_order = Order.query.get(book_order.id)
-            elif hasattr(book_order, 'order_id') and book_order.order_id:
-                db_book_order = Order.query.filter_by(order_id=book_order.order_id).first()
-            else:
-                db_book_order = db.session.merge(book_order)
-            
-            if not db_book_order or db_book_order.remaining_quantity <= 0:
-                book_orders.pop(i)
-                continue
-                
-            match_qty = min(remaining_qty, db_book_order.remaining_quantity)
-            match_price = db_book_order.price
-
-            # Execute trade
-            self._execute_trade(order, db_book_order, match_qty, match_price)
-
-            remaining_qty -= match_qty
-
-            # Remove filled order from book
-            db.session.refresh(db_book_order)
-            if db_book_order.is_filled:
-                book_orders.pop(i)
-            else:
-                i += 1
-
-        # Update order status
-        if remaining_qty == 0:
-            order.status = 'filled'
-        else:
-            order.status = 'partially_filled'
-
-    def _match_limit_order(self, order: Order, order_book: Dict):
-        """Match a limit order using selected algorithm"""
-        if self.matching_algorithm == 'PRO_RATA':
-            self._match_limit_order_pro_rata(order, order_book)
-        else:
-            self._match_limit_order_fifo(order, order_book)
-
-    def _match_limit_order_fifo(self, order: Order, order_book: Dict):
-        """Match a limit order using FIFO algorithm"""
-        opposite_side = 'asks' if order.side == 'buy' else 'bids'
-        book_orders = order_book[opposite_side]
-
-        remaining_qty = order.remaining_quantity
-
-        # Match with compatible orders (FIFO)
-        i = 0
-        while i < len(book_orders) and remaining_qty > 0:
-            book_order = book_orders[i]
-            # Get fresh order from database
-            if hasattr(book_order, 'id') and book_order.id:
-                db_book_order = Order.query.get(book_order.id)
-            elif hasattr(book_order, 'order_id') and book_order.order_id:
-                db_book_order = Order.query.filter_by(order_id=book_order.order_id).first()
-            else:
-                db_book_order = db.session.merge(book_order)
-            
-            if not db_book_order or db_book_order.remaining_quantity <= 0:
-                book_orders.pop(i)
-                continue
-
-            # Check price compatibility
-            if order.side == 'buy':
-                if order.price < db_book_order.price:
-                    break
-            else:  # sell
-                if order.price > db_book_order.price:
-                    break
-
-            match_qty = min(remaining_qty, db_book_order.remaining_quantity)
-            match_price = db_book_order.price  # Maker price takes precedence
-
-            # Execute trade
-            self._execute_trade(order, db_book_order, match_qty, match_price)
-
-            remaining_qty -= match_qty
-
-            # Remove filled order from book
-            db.session.refresh(db_book_order)
-            if db_book_order.is_filled:
-                book_orders.pop(i)
-            else:
-                i += 1
-
-        # If order still has remaining quantity, add to order book
-        if remaining_qty > 0:
-            order.status = 'open' if order.filled_quantity == 0 else 'partially_filled'
-            self._add_to_orderbook(order, order_book)
-        else:
-            order.status = 'filled'
-
-    def _match_limit_order_pro_rata(self, order: Order, order_book: Dict):
-        """Match a limit order using Pro-Rata algorithm"""
-        opposite_side = 'asks' if order.side == 'buy' else 'bids'
-        book_orders = order_book[opposite_side]
-
-        remaining_qty = order.remaining_quantity
-
-        # Find all compatible orders at the best price level
-        compatible_orders = []
-        best_price = None
-
-        for book_order in book_orders:
-            # Get fresh order from database
-            if hasattr(book_order, 'id') and book_order.id:
-                db_book_order = Order.query.get(book_order.id)
-            elif hasattr(book_order, 'order_id') and book_order.order_id:
-                db_book_order = Order.query.filter_by(order_id=book_order.order_id).first()
-            else:
-                db_book_order = db.session.merge(book_order)
-            
-            if not db_book_order or db_book_order.remaining_quantity <= 0:
-                continue
-
-            # Check price compatibility
-            if order.side == 'buy':
-                if order.price < db_book_order.price:
-                    break
-            else:  # sell
-                if order.price > db_book_order.price:
-                    break
-
-            if best_price is None:
-                best_price = db_book_order.price
-
-            # Collect orders at the best price level
-            if db_book_order.price == best_price:
-                compatible_orders.append(db_book_order)
-            else:
-                break  # We've moved to a worse price level
-
-        if not compatible_orders:
-            # No compatible orders, add to order book
-            order.status = 'open'
-            self._add_to_orderbook(order, order_book)
+        remaining = order.remaining_quantity
+        if remaining <= 0:
             return
 
-        # Calculate total quantity available at best price
-        total_available = sum(o.remaining_quantity for o in compatible_orders)
-
-        # Pro-Rata allocation: distribute order quantity proportionally
-        if remaining_qty >= total_available:
-            # Fill all compatible orders
-            for db_book_order in compatible_orders:
-                match_qty = db_book_order.remaining_quantity
-                self._execute_trade(order, db_book_order, match_qty, best_price)
-                remaining_qty -= match_qty
-                # Remove filled orders from book
-                db.session.refresh(db_book_order)
-                if db_book_order.is_filled:
-                    # Find and remove the original book_order object
-                    for idx, bo in enumerate(book_orders):
-                        if (hasattr(bo, 'id') and bo.id == db_book_order.id) or \
-                           (hasattr(bo, 'order_id') and bo.order_id == db_book_order.order_id):
-                            book_orders.pop(idx)
-                            break
+        if order.side == "buy":
+            # Buy market → match against best asks (lowest price first)
+            opposite_list = book["asks"]
         else:
-            # Allocate proportionally
-            allocations = []
-            for db_book_order in compatible_orders:
-                proportion = db_book_order.remaining_quantity / total_available
-                allocated_qty = remaining_qty * proportion
-                allocations.append((db_book_order, allocated_qty))
+            # Sell market → match against best bids (highest price first)
+            opposite_list = book["bids"]
 
-            # Execute trades
-            for db_book_order, allocated_qty in allocations:
-                if allocated_qty > 0 and remaining_qty > 0:
-                    match_qty = min(allocated_qty, remaining_qty, db_book_order.remaining_quantity)
-                    if match_qty > 0:
-                        self._execute_trade(order, db_book_order, match_qty, best_price)
-                        remaining_qty -= match_qty
-                        # Remove filled orders from book
-                        db.session.refresh(db_book_order)
-                        if db_book_order.is_filled:
-                            # Find and remove the original book_order object
-                            for idx, bo in enumerate(book_orders):
-                                if (hasattr(bo, 'id') and bo.id == db_book_order.id) or \
-                                   (hasattr(bo, 'order_id') and bo.order_id == db_book_order.order_id):
-                                    book_orders.pop(idx)
-                                    break
+        i = 0
+        while remaining > 0 and i < len(opposite_list):
+            maker = opposite_list[i]
 
-        # If order still has remaining quantity, add to order book
-        if remaining_qty > 0:
-            order.status = 'open' if order.filled_quantity == 0 else 'partially_filled'
-            self._add_to_orderbook(order, order_book)
+            # Skip empty / fully filled orders
+            if maker.remaining_quantity <= 0 or maker.status == "filled":
+                opposite_list.pop(i)
+                continue
+
+            # Market order takes whatever price is available
+            match_qty = min(remaining, maker.remaining_quantity)
+            match_price = maker.price
+
+            self._execute_trade(taker_order=order, maker_order=maker,
+                                quantity=match_qty, price=match_price)
+
+            remaining = order.remaining_quantity  # update from Order.update_fill
+
+            # Remove maker if fully filled
+            if maker.remaining_quantity <= 0 or maker.status == "filled":
+                opposite_list.pop(i)
+            else:
+                i += 1
+
+        # Set final status
+        if order.remaining_quantity <= 0:
+            order.status = "filled"
         else:
-            order.status = 'filled'
+            # For pure market, if nothing left to trade, mark as partially_filled or open
+            order.status = "partially_filled" if order.filled_quantity > 0 else "open"
 
-    def _execute_trade(self, taker_order: Order, maker_order: Order, quantity: Decimal, price: Decimal):
-        """Execute a trade between two orders"""
-        # Calculate fees
-        fee_rate = Decimal('0.001')  # 0.1%
+    def _match_limit_order(self, order: Order):
+        """Match a limit order and add any remainder to the book."""
+        pair = order.trading_pair
+        book = self.order_books[pair]
+
+        remaining = order.remaining_quantity
+        if remaining <= 0:
+            return
+
+        if order.side == "buy":
+            # Buy limit: match against asks with ask.price <= order.price
+            opposite_list = book["asks"]
+            price_ok = lambda maker_price: maker_price <= order.price
+        else:
+            # Sell limit: match against bids with bid.price >= order.price
+            opposite_list = book["bids"]
+            price_ok = lambda maker_price: maker_price >= order.price
+
+        i = 0
+        while remaining > 0 and i < len(opposite_list):
+            maker = opposite_list[i]
+
+            # Skip empty / fully filled
+            if maker.remaining_quantity <= 0 or maker.status == "filled":
+                opposite_list.pop(i)
+                continue
+
+            # Check price compatibility
+            if not price_ok(maker.price):
+                # Since list is sorted by best price first, we can stop here
+                break
+
+            match_qty = min(remaining, maker.remaining_quantity)
+            match_price = maker.price  # maker's price wins
+
+            self._execute_trade(taker_order=order, maker_order=maker,
+                                quantity=match_qty, price=match_price)
+
+            remaining = order.remaining_quantity
+
+            if maker.remaining_quantity <= 0 or maker.status == "filled":
+                opposite_list.pop(i)
+            else:
+                i += 1
+
+        # After trying to match, if still quantity left → add to book
+        if order.remaining_quantity > 0:
+            order.status = "open" if order.filled_quantity == 0 else "partially_filled"
+            self._add_to_orderbook(order)
+        else:
+            order.status = "filled"
+
+    # -------------------------------------------------------------------------
+    # Wallets, trades, book maintenance
+    # -------------------------------------------------------------------------
+    def _execute_trade(self, taker_order: Order, maker_order: Order,
+                       quantity: Decimal, price: Decimal):
+        """Execute a trade and update orders, wallets and broadcast."""
+        if quantity <= 0:
+            return
+
+        # Fees
+        fee_rate = Decimal("0.001")  # 0.1%
         maker_fee = quantity * price * fee_rate
         taker_fee = quantity * price * fee_rate
 
-        # Update orders
+        # Update orders via model helpers
         taker_order.update_fill(quantity, price)
         maker_order.update_fill(quantity, price)
 
-        # Update fees
         taker_order.fee += taker_fee
         maker_order.fee += maker_fee
 
-        # Create trade record
+        # Trade record
         trade = Trade(
             maker_order_id=maker_order.id,
             taker_order_id=taker_order.id,
@@ -334,25 +289,27 @@ class OrderMatchingEngine:
             price=price,
             quantity=quantity,
             maker_fee=maker_fee,
-            taker_fee=taker_fee
+            taker_fee=taker_fee,
         )
         db.session.add(trade)
 
-        # Update wallets
-        self._update_wallets_after_trade(taker_order, maker_order, quantity, price, taker_fee, maker_fee)
+        # Wallet updates
+        self._update_wallets_after_trade(
+            taker_order, maker_order, quantity, price, taker_fee, maker_fee
+        )
 
-        # Broadcast trade
+        # Broadcast trade over WebSocket
         self._broadcast_trade(trade)
 
-    def _update_wallets_after_trade(self, taker_order, maker_order, quantity, price, taker_fee, maker_fee):
-        """Update user wallets after trade execution"""
-        base_currency, quote_currency = taker_order.trading_pair.split('/')
+    def _update_wallets_after_trade(self, taker_order, maker_order,
+                                    quantity, price, taker_fee, maker_fee):
+        """Exactly your previous wallet logic, unchanged."""
+        base_currency, quote_currency = taker_order.trading_pair.split("/")
 
-        if taker_order.side == 'buy':
-            # Taker buys base currency with quote currency
+        if taker_order.side == "buy":
+            # Taker buys base with quote
             buyer_id, seller_id = taker_order.user_id, maker_order.user_id
 
-            # Update buyer (taker)
             buyer_base = Wallet.query.filter_by(user_id=buyer_id, currency=base_currency).first()
             buyer_quote = Wallet.query.filter_by(user_id=buyer_id, currency=quote_currency).first()
 
@@ -361,7 +318,6 @@ class OrderMatchingEngine:
                 buyer_quote.unlock_balance(quantity * price)
                 buyer_quote.deduct_balance(quantity * price + taker_fee)
 
-            # Update seller (maker)
             seller_base = Wallet.query.filter_by(user_id=seller_id, currency=base_currency).first()
             seller_quote = Wallet.query.filter_by(user_id=seller_id, currency=quote_currency).first()
 
@@ -370,10 +326,9 @@ class OrderMatchingEngine:
                 seller_base.deduct_balance(quantity)
                 seller_quote.add_balance(quantity * price - maker_fee)
         else:
-            # Taker sells base currency for quote currency
+            # Taker sells base for quote
             seller_id, buyer_id = taker_order.user_id, maker_order.user_id
 
-            # Update seller (taker)
             seller_base = Wallet.query.filter_by(user_id=seller_id, currency=base_currency).first()
             seller_quote = Wallet.query.filter_by(user_id=seller_id, currency=quote_currency).first()
 
@@ -382,7 +337,6 @@ class OrderMatchingEngine:
                 seller_base.deduct_balance(quantity)
                 seller_quote.add_balance(quantity * price - taker_fee)
 
-            # Update buyer (maker)
             buyer_base = Wallet.query.filter_by(user_id=buyer_id, currency=base_currency).first()
             buyer_quote = Wallet.query.filter_by(user_id=buyer_id, currency=quote_currency).first()
 
@@ -391,121 +345,57 @@ class OrderMatchingEngine:
                 buyer_quote.unlock_balance(quantity * price)
                 buyer_quote.deduct_balance(quantity * price + maker_fee)
 
-    def _add_to_orderbook(self, order: Order, order_book: Dict):
-        """Add order to the order book"""
-        side = 'bids' if order.side == 'buy' else 'asks'
+    def _add_to_orderbook(self, order: Order):
+        """Insert order into in-memory book with price-time priority."""
+        pair = order.trading_pair
+        if pair not in self.order_books:
+            self.order_books[pair] = {"bids": [], "asks": []}
 
-        if self.matching_algorithm == 'FIFO':
-            # FIFO: append at end (first in, first out)
-            order_book[side].append(order)
-        else:
-            # Pro-Rata: maintain price-time priority
-            # Insert at appropriate position based on price and time
-            inserted = False
-            for i, existing_order in enumerate(order_book[side]):
-                if order.side == 'buy':
-                    # For bids: higher price first, then earlier time
-                    if order.price > existing_order.price or \
-                            (order.price == existing_order.price and order.created_at < existing_order.created_at):
-                        order_book[side].insert(i, order)
-                        inserted = True
-                        break
-                else:
-                    # For asks: lower price first, then earlier time
-                    if order.price < existing_order.price or \
-                            (order.price == existing_order.price and order.created_at < existing_order.created_at):
-                        order_book[side].insert(i, order)
-                        inserted = True
-                        break
+        book = self.order_books[pair]
+        side_key = "bids" if order.side == "buy" else "asks"
+        side_list = book[side_key]
 
-            if not inserted:
-                order_book[side].append(order)
+        # Insert with best price first, then earlier time
+        inserted = False
+        for i, existing in enumerate(side_list):
+            if order.side == "buy":
+                # Higher price first; if equal price, older first
+                if order.price > existing.price or (
+                    order.price == existing.price and order.created_at < existing.created_at
+                ):
+                    side_list.insert(i, order)
+                    inserted = True
+                    break
+            else:
+                # Sell: lower price first; if equal, older first
+                if order.price < existing.price or (
+                    order.price == existing.price and order.created_at < existing.created_at
+                ):
+                    side_list.insert(i, order)
+                    inserted = True
+                    break
 
+        if not inserted:
+            side_list.append(order)
+
+    # -------------------------------------------------------------------------
+    # WebSocket broadcasting
+    # -------------------------------------------------------------------------
     def _broadcast_orderbook_update(self, pair: str):
-        """Broadcast order book update via WebSocket"""
         try:
-            order_book_data = self.get_orderbook(pair)
-            socketio.emit('orderbook_update', {
-                'pair': pair,
-                'data': order_book_data
-            })
+            data = self.get_orderbook(pair)
+            socketio.emit(
+                "orderbook_update",
+                {"pair": pair, "data": data},
+            )
         except Exception as e:
-            print(f"Error broadcasting orderbook: {e}")
+            print(f"[MatchingEngine] Error broadcasting orderbook: {e}")
 
     def _broadcast_trade(self, trade: Trade):
-        """Broadcast trade via WebSocket"""
         try:
-            socketio.emit('trade', trade.to_dict())
+            socketio.emit("trade", trade.to_dict())
         except Exception as e:
-            print(f"Error broadcasting trade: {e}")
-
-    def get_orderbook(self, pair: str, depth: int = 20) -> Dict:
-        """Get current order book for a trading pair"""
-        if pair not in self.order_books:
-            return {'bids': [], 'asks': []}
-
-        order_book = self.order_books[pair]
-
-        # Format bids and asks
-        bids = [
-            {
-                'price': float(order.price),
-                'quantity': float(order.remaining_quantity),
-                'total': float(order.price * order.remaining_quantity)
-            }
-            for order in order_book['bids'][:depth]
-        ]
-
-        asks = [
-            {
-                'price': float(order.price),
-                'quantity': float(order.remaining_quantity),
-                'total': float(order.price * order.remaining_quantity)
-            }
-            for order in order_book['asks'][:depth]
-        ]
-
-        return {'bids': bids, 'asks': asks}
-
-    def cancel_order(self, order_id: str) -> bool:
-        """Cancel an order"""
-        try:
-            with current_app.app_context():
-                order = Order.query.filter_by(order_id=order_id).first()
-                if not order:
-                    return False
-
-                if order.status not in ['open', 'partially_filled']:
-                    return False
-
-                # Remove from order book
-                pair = order.trading_pair
-                if pair in self.order_books:
-                    side = 'bids' if order.side == 'buy' else 'asks'
-                    self.order_books[pair][side] = [
-                        o for o in self.order_books[pair][side] if o.order_id != order_id
-                    ]
-
-                # Unlock balance
-                base_currency, quote_currency = order.trading_pair.split('/')
-                currency = quote_currency if order.side == 'buy' else base_currency
-                amount = order.remaining_quantity * order.price if order.side == 'buy' else order.remaining_quantity
-
-                wallet = Wallet.query.filter_by(user_id=order.user_id, currency=currency).first()
-                if wallet:
-                    wallet.unlock_balance(amount)
-
-                # Update order status
-                order.cancel()
-                db.session.commit()
-
-                # Broadcast update
-                self._broadcast_orderbook_update(pair)
-
-                return True
-        except Exception as e:
-            print(f"Error canceling order: {e}")
-            return False
+            print(f"[MatchingEngine] Error broadcasting trade: {e}")
 
 
 # Global instance
