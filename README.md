@@ -206,6 +206,16 @@ pytest test/ --cov=app --cov-report=html
 
 # Run all tests using the test runner
 python test/run_tests.py
+
+docker-compose exec backend python -m pytest test/test_trading_engine_comprehensive.py -v --tb=short -p no:warnings
+docker-compose exec backend python -m pytest test/test_wallet_system.py -v --tb=short -p no:warnings
+docker-compose exec backend python -m pytest test/test_kyc_aml.py -v --tb=short -p no:warnings
+docker-compose exec backend python -m pytest test/test_api_endpoints.py -v --tb=short -p no:warnings
+docker-compose exec backend python -m pytest test/test_security.py -v --tb=short -p no:warnings
+docker-compose exec backend python -m pytest test/test_matching_engine.py -v --tb=short -p no:warnings
+docker-compose exec backend pytest test/ -v --tb=short -p no:warnings --cov=app --cov-report=html
+docker-compose exec backend python test/stress_test.py
+
 ```
 
 ### Fixing Web3 Dependency Issue
